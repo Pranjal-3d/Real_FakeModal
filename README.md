@@ -174,25 +174,6 @@ Hybrid detector: **MediaPipe face crop** → **FFT Moiré analysis** + **LBP tex
 
 Company held-out accuracy may differ if their attacks look different from our training photos.
 
-### Latency
-
-| Device | Time per image |
-|--------|----------------|
-| Laptop CPU (warm) | **~140 ms** (ensemble) |
-| First run (model load) | ~270 ms |
-
-### Cost per image
-
-| Deployment | Cost |
-|------------|------|
-| **On-device (phone)** | **$0** — runs offline |
-| Cloud VPS | ~$0.00005/image (~$50 per million) |
-
-### What I'd improve with more time
-
-- More screen variety (tablets, printouts, different monitors)
-- Quantize MobileNet to INT8 for &lt;30 ms on mobile
-- Active learning from production false positives
 
 ### Fraud threshold
 
