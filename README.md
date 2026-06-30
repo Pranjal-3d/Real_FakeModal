@@ -1,4 +1,4 @@
-# Spot the Fake Photo — SalesCode AI Take-Home
+# Spot the Fake Photo
 
 Given **one image**, decide if it is a **real photo** or a **photo of a screen** (phone/laptop/printout recapture).
 
@@ -15,13 +15,7 @@ python predict.py some_image.jpg
 
 ---
 
-## Example images (from our phone dataset)
 
-| Real scenery (phone) | Screen recapture (phone) |
-|:---:|:---:|
-| ![Real phone photo](docs/images/example_real_phone.jpg) | ![Screen phone photo](docs/images/example_screen_phone.jpg) |
-
----
 
 ## Results on our dataset
 
