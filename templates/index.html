@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Screen Recapture Detector | Fraud Shield Pro</title>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #0B0F19;
+            --bg-surface: rgba(17, 24, 39, 0.7);
+            --border-glow: rgba(99, 102, 241, 0.4);
+            --primary: #6366F1;
+            --primary-hover: #4F46E5;
+            --success: #10B981;
+            --danger: #EF4444;
+            --warning: #F59E0B;
+            --text-main: #F3F4F6;
+            --text-muted: #9CA3AF;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.1) 0%, transparent 40%);
+        }
+
+        header {
+            width: 100%;
+            max-width: 1200px;
+            padding: 2rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .logo {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 700;
+            font-size: 1.5rem;
+            background: linear-gradient(135deg, #6366F1 0%, #10B981 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .badge-live {
+            background-color: rgba(239, 68, 68, 0.2);
+            color: #EF4444;
+            padding: 0.25rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .badge-live::before {
+            content: '';
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background-color: #EF4444;
+            border-radius: 50%;
+            animation: pulse-dot 1.5s infinite;
+        }
+
+        @keyframes pulse-dot {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.5); opacity: 0.4; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        main {
+            width: 100%;
+            max-width: 1200px;
+            padding: 2rem 1.5rem 4rem 1.5rem;
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 2rem;
+        }
+
+        @media (max-width: 900px) {
+            main {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: var(--bg-surface);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 1.75rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .panel-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1.25rem;
+            color: #FFFFFF;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        /* --- Capture Section --- */
+        .capture-container {
+            width: 100%;
+            background-color: #000;
+            border-radius: 12px;
+            aspect-ratio: 4/3;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #webcam {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* Mirror camera */
+        }
+
+        #captured-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none;
+        }
+
+        .scan-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            border: 2px solid transparent;
+            pointer-events: none;
+            box-sizing: border-box;
+            transition: all 0.3s ease;
+        }
+
+        .scan-overlay.secure {
+            border: 3px solid var(--success);
+            box-shadow: inset 0 0 30px rgba(16, 185, 129, 0.2);
+        }
+
+        .scan-overlay.fraud {
+            border: 3px solid var(--danger);
+            box-shadow: inset 0 0 30px rgba(239, 68, 68, 0.2);
+        }
+
+        .scanbox-reticle {
+            position: absolute;
+            top: 15%;
+            left: 15%;
+            width: 70%;
+            height: 70%;
+            border: 1.5px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+        }
+
+        .control-row {
+            margin-top: 1.25rem;
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            flex: 1;
+            min-width: 130px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
+            border: none;
+            border-radius: 8px;
+            color: #FFF;
+            padding: 0.85rem 1rem;
+            font-size: 0.9rem;
+            font-weight: 550;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-main);
+            box-shadow: none;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+            box-shadow: none;
+        }
+
+        /* --- File Upload Area --- */
+        .upload-zone {
+            border: 2px dashed rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            padding: 2.5rem 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 1.5rem;
+            background: rgba(255, 255, 255, 0.01);
+        }
+
+        .upload-zone:hover {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.03);
+        }
+
+        .upload-icon {
+            font-size: 2.5rem;
+            margin-bottom: 0.75rem;
+            color: var(--text-muted);
+            display: inline-block;
+        }
+
+        .upload-text {
+            font-size: 0.9rem;
+            font-weight: 450;
+            color: var(--text-muted);
+        }
+
+        .upload-text span {
+            color: var(--primary);
+            font-weight: 550;
+        }
+
+        /* --- Output Dashboard Panel --- */
+        .results-panel {
+            gap: 1.75rem;
+        }
+
+        .gauge-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .radial-gauge {
+            position: relative;
+            width: 180px;
+            height: 180px;
+        }
+
+        .radial-gauge svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+
+        .gauge-bg {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.05);
+            stroke-width: 10;
+        }
+
+        .gauge-fill {
+            fill: none;
+            stroke: var(--success);
+            stroke-width: 10;
+            stroke-dasharray: 471.2;
+            stroke-dashoffset: 471.2; /* Animates to target */
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.8s ease;
+        }
+
+        .gauge-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .gauge-score {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.25rem;
+            font-weight: 700;
+            line-height: 1;
+            color: #FFF;
+        }
+
+        .gauge-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-top: 0.25rem;
+        }
+
+        .prediction-badge {
+            margin-top: 1.25rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.15rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            text-align: center;
+            transition: color 0.5s ease;
+        }
+
+        .prediction-badge.secure {
+            color: var(--success);
+        }
+
+        .prediction-badge.fraud {
+            color: var(--danger);
+        }
+
+        .latency-tag {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35rem;
+            margin-top: 0.5rem;
+        }
+
+        /* --- Feature Analyzer --- */
+        .features-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1.15rem;
+        }
+
+        .feature-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .feature-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+        }
+
+        .feature-name {
+            font-weight: 500;
+            color: var(--text-main);
+        }
+
+        .feature-val {
+            font-family: 'Outfit', sans-serif;
+            color: #FFF;
+            font-weight: bold;
+        }
+
+        .feature-bar-bg {
+            width: 100%;
+            height: 6px;
+            background-color: rgba(255, 255, 255, 0.05);
+            border-radius: 9999px;
+            overflow: hidden;
+        }
+
+        .feature-bar-fill {
+            height: 100%;
+            width: 0%;
+            background-color: var(--primary);
+            border-radius: 9999px;
+            transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.6s ease;
+        }
+
+        .feature-desc {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        /* --- Info Section --- */
+        .tech-info {
+            grid-column: 1 / -1;
+            margin-top: 1rem;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 768px) {
+            .tech-info {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .info-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 12px;
+            padding: 1.25rem;
+        }
+
+        .info-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #FFF;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .info-icon {
+            color: var(--primary);
+        }
+
+        .info-text {
+            font-size: 0.8rem;
+            line-height: 1.5;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <span>🛡️</span> Fraud Shield Recapture Detector
+        </div>
+        <div class="badge-live">Live Guard Active</div>
+    </header>
+
+    <main>
+        <!-- Left Column: Acquisition Panel -->
+        <div class="panel">
+            <div class="panel-title">
+                <span>Image Acquisition</span>
+                <span id="acquisition-status" style="font-size: 0.8rem; color: var(--text-muted); font-weight: normal;">Camera Ready</span>
+            </div>
+            
+            <div class="capture-container">
+                <video id="webcam" autoplay playsinline muted></video>
+                <img id="captured-image" alt="Captured Scene">
+                <div class="scan-overlay" id="boundary-overlay"></div>
+                <div class="scanbox-reticle"></div>
+            </div>
+
+            <div class="control-row">
+                <button class="btn" id="btn-camera" onclick="toggleCamera()">Stop Camera</button>
+                <button class="btn btn-secondary" onclick="captureFrame()">Capture & Analyze</button>
+                <button class="btn btn-secondary" onclick="toggleStreamMode()" id="btn-stream">Start Live Stream</button>
+            </div>
+
+            <div class="upload-zone" onclick="document.getElementById('file-input').click()">
+                <div class="upload-icon">📁</div>
+                <div class="upload-text">Drag & drop photo here or <span>click to browse</span></div>
+                <input type="file" id="file-input" style="display-none; visibility: hidden; width: 0; height: 0;" accept="image/*" onchange="uploadImage(event)">
+            </div>
+        </div>
+
+        <!-- Right Column: Results Dashboard -->
+        <div class="panel results-panel">
+            <div class="panel-title">Liveness Diagnostics</div>
+
+            <!-- Gauge -->
+            <div class="gauge-container">
+                <div class="radial-gauge">
+                    <svg viewBox="0 0 160 160">
+                        <circle class="gauge-bg" cx="80" cy="80" r="75"></circle>
+                        <circle class="gauge-fill" id="indicator-fill" cx="80" cy="80" r="75"></circle>
+                    </svg>
+                    <div class="gauge-text">
+                        <div class="gauge-score" id="score-text">0%</div>
+                        <div class="gauge-label">Fraud Score</div>
+                    </div>
+                </div>
+                <div class="prediction-badge secure" id="prediction-badge">Pending Scan</div>
+                <div class="latency-tag">
+                    <span>⚡ Latency:</span> <span id="latency-text" style="color: #FFF; font-weight:600;">--</span>
+                </div>
+            </div>
+
+            <!-- Feature Breakdown -->
+            <div class="features-list">
+                <!-- Peak Count -->
+                <div class="feature-item">
+                    <div class="feature-meta">
+                        <span class="feature-name">Moiré Frequency Peaks</span>
+                        <span class="feature-val" id="val-fft-peaks">0</span>
+                    </div>
+                    <div class="feature-bar-bg">
+                        <div class="feature-bar-fill" id="bar-fft-peaks"></div>
+                    </div>
+                    <div class="feature-desc">Frequencies mirroring repeating screen subpixel rows.</div>
+                </div>
+
+                <!-- High-Freq Max Intensity -->
+                <div class="feature-item">
+                    <div class="feature-meta">
+                        <span class="feature-name">Grid Spectrum Power</span>
+                        <span class="feature-val" id="val-fft-max">0.000</span>
+                    </div>
+                    <div class="feature-bar-bg">
+                        <div class="feature-bar-fill" id="bar-fft-max"></div>
+                    </div>
+                    <div class="feature-desc">Magnitude spikes indicating high-energy grid alignments.</div>
+                </div>
+
+                <!-- Laplacian Kurtosis -->
+                <div class="feature-item">
+                    <div class="feature-meta">
+                        <span class="feature-name">Gradient Variance Outliers</span>
+                        <span class="feature-val" id="val-lap-kurt">0.0</span>
+                    </div>
+                    <div class="feature-bar-bg">
+                        <div class="feature-bar-fill" id="bar-lap-kurt"></div>
+                    </div>
+                    <div class="feature-desc">Edge profile kurtosis shifts caused by LCD aperture grills.</div>
+                </div>
+
+                <!-- LBP Entropy -->
+                <div class="feature-item">
+                    <div class="feature-meta">
+                        <span class="feature-name">Micro-Texture Randomness</span>
+                        <span class="feature-val" id="val-lbp-entropy">0.000</span>
+                    </div>
+                    <div class="feature-bar-bg">
+                        <div class="feature-bar-fill" id="bar-lbp-entropy"></div>
+                    </div>
+                    <div class="feature-desc">Regularity of local binary textures vs natural scenes.</div>
+                </div>
+
+                <!-- S HSV Mean -->
+                <div class="feature-item">
+                    <div class="feature-meta">
+                        <span class="feature-name">Color Light Emission</span>
+                        <span class="feature-val" id="val-s-mean" style="color: #FFF;">0.000</span>
+                    </div>
+                    <div class="feature-bar-bg">
+                        <div class="feature-bar-fill" id="bar-s-mean"></div>
+                    </div>
+                    <div class="feature-desc">High emission spectrum saturations unique to backlights.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Row 2: Tech Info Cards -->
+        <div class="tech-info">
+            <div class="info-card">
+                <div class="info-title">
+                    <span class="info-icon">📡</span> Frequency Domain Analysis
+                </div>
+                <div class="info-text">
+                    Digital screens have a precise matrix grid of pixels. When a camera recaptures a screen, the grid sampling creates high-frequency periodic interference (Moiré). The detector runs a 2D Hann-guided Fourier Transform (FFT) to isolate and measure these sharp frequency spikes.
+                </div>
+            </div>
+            <div class="info-card">
+                <div class="info-title">
+                    <span class="info-icon">🔍</span> Micro-Texture Profiling
+                </div>
+                <div class="info-text">
+                    Natural objects have stochastic, randomized textures. Screens, when photographed at close range, exhibit extremely uniform, grid-like micro-patterns. Local Binary Pattern (LBP) entropy calculations isolate these regularities to identify screen structures.
+                </div>
+            </div>
+            <div class="info-card">
+                <div class="info-title">
+                    <span class="info-icon">✴️</span> Edge Profile Outliers
+                </div>
+                <div class="info-text">
+                    Physical scenes captured by lenses yield edges governed by optics and lighting. Recaptured screen edges contain discrete step-functions of red/green/blue emitters. The Laplacian kurtosis features quantify these abnormal pixel gradient distributions.
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const video = document.getElementById('webcam');
+        const capturedImg = document.getElementById('captured-image');
+        const boundaryOverlay = document.getElementById('boundary-overlay');
+        const scoreText = document.getElementById('score-text');
+        const indicatorFill = document.getElementById('indicator-fill');
+        const predictionBadge = document.getElementById('prediction-badge');
+        const latencyText = document.getElementById('latency-text');
+        const statusReport = document.getElementById('acquisition-status');
+        
+        let stream = null;
+        let streamInterval = null;
+        let isStreaming = false;
+
+        async function initCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 800, height: 600, facingMode: 'user' }
+                });
+                video.srcObject = stream;
+                video.style.display = 'block';
+                capturedImg.style.display = 'none';
+                statusReport.innerText = "Camera Active";
+            } catch (err) {
+                console.error("Camera access error:", err);
+                statusReport.innerText = "Camera Blocked. Use File Upload.";
+                document.getElementById('btn-camera').innerText = "Start Camera";
+                video.style.display = 'none';
+            }
+        }
+
+        function toggleCamera() {
+            const btn = document.getElementById('btn-camera');
+            if (stream && stream.getVideoTracks().length > 0) {
+                // Stop camera
+                if (isStreaming) toggleStreamMode();
+                stream.getVideoTracks().forEach(track => track.stop());
+                video.srcObject = null;
+                stream = null;
+                btn.innerText = "Start Camera";
+                statusReport.innerText = "Camera Inactive";
+            } else {
+                initCamera();
+                btn.innerText = "Stop Camera";
+            }
+        }
+
+        function captureFrame() {
+            if (!stream) {
+                alert("Camera is not active. Please start camera or upload an image file.");
+                return;
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            // Draw flipped video onto canvas to match mirrored preview
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+            sendToDetection(dataUrl);
+        }
+
+        function toggleStreamMode() {
+            const btn = document.getElementById('btn-stream');
+            if (isStreaming) {
+                clearInterval(streamInterval);
+                isStreaming = false;
+                btn.innerText = "Start Live Stream";
+                btn.classList.add('btn-secondary');
+            } else {
+                if (!stream) {
+                    alert("Please start the camera first.");
+                    return;
+                }
+                isStreaming = true;
+                btn.innerText = "Stop Live Stream";
+                btn.classList.remove('btn-secondary');
+                // Analyze every 250ms
+                streamInterval = setInterval(captureFrame, 250);
+            }
+        }
+
+        function uploadImage(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const dataUrl = e.target.result;
+                
+                // Show uploaded image instead of stream
+                if (isStreaming) toggleStreamMode();
+                if (stream) {
+                    stream.getVideoTracks().forEach(track => track.stop());
+                    stream = null;
+                    document.getElementById('btn-camera').innerText = "Start Camera";
+                }
+                
+                video.style.display = 'none';
+                capturedImg.src = dataUrl;
+                capturedImg.style.display = 'block';
+                statusReport.innerText = `Loaded File: ${file.name}`;
+                
+                sendToDetection(dataUrl);
+            }
+            reader.readAsDataURL(file);
+        }
+
+        async function sendToDetection(imageBase64) {
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imageBase64 })
+                });
+                
+                const result = await response.json();
+                if (result.status === 'success') {
+                    updateDashboard(result);
+                } else {
+                    console.error("Endpoint error:", result.error);
+                }
+            } catch (err) {
+                console.error("Networking error:", err);
+            }
+        }
+
+        function updateDashboard(data) {
+            const score = data.score;
+            const scorePct = Math.round(score * 100);
+            
+            // 1. Update Gauge Text
+            scoreText.innerText = `${scorePct}%`;
+            
+            // 2. Animate SVG Gauge ring
+            // Stroke dashoffset: circumference = 2 * PI * r = 2 * 3.14159 * 75 = 471.24
+            const offsetWidth = 471.2 - (471.2 * score);
+            indicatorFill.style.strokeDashoffset = offsetWidth;
+            
+            // 3. Update Colors based on risk
+            let borderClass = 'secure';
+            let colorVal = 'var(--success)';
+            
+            if (score >= 0.5) {
+                borderClass = 'fraud';
+                colorVal = 'var(--danger)';
+                boundaryOverlay.className = "scan-overlay fraud";
+                predictionBadge.className = "prediction-badge fraud";
+            } else if (score >= 0.25) {
+                borderClass = 'warning';
+                colorVal = 'var(--warning)';
+                boundaryOverlay.className = "scan-overlay";
+                predictionBadge.className = "prediction-badge";
+                predictionBadge.style.color = "var(--warning)";
+            } else {
+                boundaryOverlay.className = "scan-overlay secure";
+                predictionBadge.className = "prediction-badge secure";
+            }
+            
+            indicatorFill.style.stroke = colorVal;
+            predictionBadge.innerText = data.prediction;
+            latencyText.innerText = `${data.latency_ms} ms`;
+            
+            // 4. Update Features Progress Bars
+            const features = data.features;
+            
+            // Peak count max out at 1500 for scaling view
+            updateProgressBar('fft-peaks', features.fft_peak_count.value, 1500, features.fft_peak_count.scaled);
+            updateProgressBar('fft-max', features.fft_high_max.value, 0.005, features.fft_high_max.scaled);
+            updateProgressBar('lap-kurt', features.lap_kurt.value, 15.0, features.lap_kurt.scaled);
+            updateProgressBar('lbp-entropy', features.lbp_entropy.value - 4.0, 3.5, features.lbp_entropy.scaled);
+            updateProgressBar('s-mean', features.s_mean.value, 0.8, features.s_mean.scaled);
+        }
+
+        function updateProgressBar(idPrefix, rawVal, scaleMax, zScore) {
+            const bar = document.getElementById(`bar-${idPrefix}`);
+            const valLabel = document.getElementById(`val-${idPrefix}`);
+            
+            // Display raw value
+            valLabel.innerText = rawVal;
+            
+            // Calculate progress percentage (clamped between 0 and 100)
+            // Or use sigmoid of scaling to map weights
+            const zScoreSigmoid = 1.0 / (1.0 + Math.exp(-zScore)); // 0 to 1
+            const pct = Math.round(zScoreSigmoid * 100);
+            
+            bar.style.width = `${pct}%`;
+            
+            // Color bar red if it is pulling strongly towards fraud (zScore > 0.5)
+            if (zScore > 0.5) {
+                bar.style.backgroundColor = 'var(--danger)';
+            } else if (zScore > -0.5) {
+                bar.style.backgroundColor = 'var(--warning)';
+            } else {
+                bar.style.backgroundColor = 'var(--success)';
+            }
+        }
+
+        // Run on startup
+        window.addEventListener('DOMContentLoaded', () => {
+            initCamera();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+    "sklearn": {
+        "val_accuracy": 0.9821428571428571,
+        "model_type": "LogisticRegression"
+    },
+    "primary_model": "sklearn",
+    "mobilenet": {
+        "val_accuracy": 0.9642857142857143
+    },
+    "fraud_threshold": 0.39,
+    "heuristic_stats": {
+        "real_peak512_p75": 724.0,
+        "screen_peak512_p25": 373.5,
+        "real_lbp_entropy_p25": 5.263651354183894,
+        "screen_lbp_entropy_p75": 5.440618056646738,
+        "real_lap_var_p75": 530.9530062091403,
+        "screen_lap_var_p25": 29.228787369089655
+    }
+}
