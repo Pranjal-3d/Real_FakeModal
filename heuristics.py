@@ -34,14 +34,17 @@ def load_reference_stats():
     return config.get("heuristic_stats", DEFAULT_STATS.copy())
 
 
-def heuristic_screen_score(img_bgr):
+def heuristic_screen_score(img_bgr, prepared=None):
     """
     Score in [0, 1] from physical screen artifacts (Moiré peaks, texture, sharpness).
     Works without ML and helps catch fakes the neural net misses.
     """
-    stats = load_reference_stats()
-    feats = extract_features_from_bgr(img_bgr)
+    if prepared is None:
+        from preprocess import prepare_image
+        prepared = prepare_image(img_bgr, use_face_crop=True, output_size=512)
+    feats = extract_features_from_bgr(img_bgr, prepared=prepared)
 
+    stats = load_reference_stats()
     peak256 = feats[3]
     peak512 = feats[7]
     lap_var = feats[8]

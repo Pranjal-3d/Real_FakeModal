@@ -1,4 +1,3 @@
-import glob
 import json
 import os
 import time
@@ -14,26 +13,33 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 
 from model_registry import update_model_entry, save_detection_settings
-from features import FEATURE_NAMES, extract_features
+from features import FEATURE_NAMES, extract_features_from_bgr
 from heuristics import compute_heuristic_stats
+from preprocess import collect_image_paths, load_image_bgr, prepare_image
+from augmentation import augment_variants
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SKLEARN_PATH = os.path.join(BASE_DIR, "model_sklearn.joblib")
 WEIGHTS_PATH = os.path.join(BASE_DIR, "model_weights.json")
+AUG_PER_IMAGE = 2
 
 
 def collect_dataset():
-    real_paths = sorted(
-        glob.glob(os.path.join(BASE_DIR, "real", "*.jpg"))
-        + glob.glob(os.path.join(BASE_DIR, "real", "*.png"))
-        + glob.glob(os.path.join(BASE_DIR, "real", "*.jpeg"))
-    )
-    screen_paths = sorted(
-        glob.glob(os.path.join(BASE_DIR, "screen", "*.jpg"))
-        + glob.glob(os.path.join(BASE_DIR, "screen", "*.png"))
-        + glob.glob(os.path.join(BASE_DIR, "screen", "*.jpeg"))
-    )
+    real_paths = collect_image_paths(os.path.join(BASE_DIR, "real"))
+    screen_paths = collect_image_paths(os.path.join(BASE_DIR, "screen"))
     return real_paths, screen_paths
+
+
+def features_from_path(path, augment=False):
+    img = load_image_bgr(path)
+    if img is None:
+        raise ValueError(f"Could not read: {path}")
+    prepared = prepare_image(img, use_face_crop=True, output_size=512)
+    rows = [extract_features_from_bgr(img, prepared=prepared)]
+    if augment:
+        for aug in augment_variants(prepared, count=AUG_PER_IMAGE):
+            rows.append(extract_features_from_bgr(aug, prepared=aug))
+    return rows
 
 
 def main():
@@ -43,35 +49,50 @@ def main():
         print("Error: Dataset directories are empty. Run download scripts first.")
         return
 
-    X_data, y_data = [], []
-    print("Extracting features from all images...")
+    all_paths = real_paths + screen_paths
+    all_labels = [0] * len(real_paths) + [1] * len(screen_paths)
+    train_paths, val_paths, y_train_paths, y_val_paths = train_test_split(
+        all_paths, all_labels, test_size=0.2, random_state=42, stratify=all_labels
+    )
+
+    X_train_list, y_train_list = [], []
+    X_val_list, y_val_list = [], []
+
+    print("Extracting features (MediaPipe face crop + train-only augmentation)...")
     start_time = time.time()
 
-    for path in real_paths:
+    for path, label in zip(train_paths, y_train_paths):
         try:
-            X_data.append(extract_features(path))
-            y_data.append(0)
+            for feats in features_from_path(path, augment=True):
+                X_train_list.append(feats)
+                y_train_list.append(label)
         except Exception as e:
             print(f"Error reading {path}: {e}")
 
-    for path in screen_paths:
+    for path, label in zip(val_paths, y_val_paths):
         try:
-            X_data.append(extract_features(path))
-            y_data.append(1)
+            for feats in features_from_path(path, augment=False):
+                X_val_list.append(feats)
+                y_val_list.append(label)
         except Exception as e:
             print(f"Error reading {path}: {e}")
 
-    X = np.array(X_data, dtype=np.float64)
-    y = np.array(y_data)
+    X_train = np.array(X_train_list, dtype=np.float64)
+    y_train = np.array(y_train_list)
+    X_val = np.array(X_val_list, dtype=np.float64)
+    y_val = np.array(y_val_list)
+    X = np.vstack([X_train, X_val]) if len(X_val) else X_train
+    y = np.concatenate([y_train, y_val]) if len(y_val) else y_train
 
-    nan_mask = ~np.isfinite(X)
-    if nan_mask.any():
-        col_means = np.nanmean(X, axis=0)
-        col_means = np.where(np.isfinite(col_means), col_means, 0.0)
-        X[nan_mask] = np.take(col_means, np.where(nan_mask)[1])
-        print(f"  Replaced {nan_mask.sum()} NaN/Inf values with column means.")
+    for arr in (X_train, X_val):
+        nan_mask = ~np.isfinite(arr)
+        if nan_mask.any():
+            col_means = np.nanmean(X, axis=0)
+            col_means = np.where(np.isfinite(col_means), col_means, 0.0)
+            arr[nan_mask] = np.take(col_means, np.where(nan_mask)[1])
 
-    print(f"Feature extraction done in {time.time() - start_time:.2f}s. Shape: {X.shape}")
+    print(f"Feature extraction done in {time.time() - start_time:.2f}s.")
+    print(f"  Train: {X_train.shape[0]} samples | Val: {X_val.shape[0]} samples")
 
     candidates = {
         "LogisticRegression": Pipeline([
@@ -88,16 +109,12 @@ def main():
         ),
     }
 
-    print("\n--- 5-Fold Cross-Validation ---")
+    print("\n--- 5-Fold Cross-Validation (train set) ---")
     cv_scores = {}
     for name, model in candidates.items():
-        scores = cross_val_score(model, X, y, cv=5, scoring="accuracy")
+        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="accuracy")
         cv_scores[name] = scores.mean()
         print(f"{name}: {scores.mean() * 100:.2f}% (+/- {scores.std() * 100:.2f}%)")
-
-    X_train, X_val, y_train, y_val = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
 
     val_scores = {}
     fitted = {}

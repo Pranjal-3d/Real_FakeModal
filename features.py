@@ -48,8 +48,10 @@ def _fft_features(crop, min_r=30, max_r=240, peak_floor=2e-5):
     ]
 
 
-def extract_features_from_bgr(img_bgr):
+def extract_features_from_bgr(img_bgr, prepared=None):
     """Extract feature vector from a BGR OpenCV image."""
+    if prepared is not None:
+        img_bgr = prepared
     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
     h, w = gray.shape
@@ -98,10 +100,12 @@ def extract_features_from_bgr(img_bgr):
 
 
 def extract_features(image_path):
-    img_bgr = cv2.imread(image_path)
+    from preprocess import load_image_bgr, prepare_image
+    img_bgr = load_image_bgr(image_path)
     if img_bgr is None:
         raise ValueError(f"Could not read image: {image_path}")
-    return extract_features_from_bgr(img_bgr)
+    prepared = prepare_image(img_bgr, use_face_crop=True, output_size=512)
+    return extract_features_from_bgr(img_bgr, prepared=prepared)
 
 
 FEATURE_NAMES = [

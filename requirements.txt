@@ -7,3 +7,5 @@ flask>=3.0.0
 torch>=2.0.0
 torchvision>=0.15.0
 huggingface_hub>=0.20.0
+mediapipe>=0.10.0
+Pillow>=10.0.0

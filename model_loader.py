@@ -85,8 +85,10 @@ def _predict_mobilenet(img_bgr):
     import torch
     import cv2
     from torchvision import transforms
+    from preprocess import prepare_image
 
-    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+    prepared = prepare_image(img_bgr, use_face_crop=True, output_size=mobilenet["img_size"])
+    img_rgb = cv2.cvtColor(prepared, cv2.COLOR_BGR2RGB)
     size = mobilenet["img_size"]
     transform = transforms.Compose([
         transforms.ToPILImage(),
@@ -105,7 +107,9 @@ def _predict_sklearn(img_bgr):
     if bundle is None:
         return None
     from features import extract_features_from_bgr
-    features = np.array(extract_features_from_bgr(img_bgr), dtype=np.float64).reshape(1, -1)
+    from preprocess import prepare_image
+    prepared = prepare_image(img_bgr, use_face_crop=True, output_size=512)
+    features = np.array(extract_features_from_bgr(img_bgr, prepared=prepared), dtype=np.float64).reshape(1, -1)
     model = bundle["model"]
     if hasattr(model, "predict_proba"):
         return float(model.predict_proba(features)[0, 1])
@@ -115,14 +119,24 @@ def _predict_sklearn(img_bgr):
 def predict_from_bgr(img_bgr):
     """Return fraud probability in [0, 1] where 1 = screen recapture."""
     from heuristics import heuristic_screen_score
+    from preprocess import prepare_image
 
+    prepared = prepare_image(img_bgr, use_face_crop=True, output_size=512)
     mobilenet_prob = _predict_mobilenet(img_bgr)
     sklearn_prob = _predict_sklearn(img_bgr)
-    heuristic_prob = heuristic_screen_score(img_bgr)
+    heuristic_prob = heuristic_screen_score(prepared)
 
     ml_probs = [p for p in (mobilenet_prob, sklearn_prob) if p is not None]
     if ml_probs:
-        ml_score = sum(ml_probs) / len(ml_probs)
+        from model_registry import read_config
+        cfg = read_config()
+        w_sk = cfg.get("sklearn", {}).get("val_accuracy", 0.5)
+        w_mn = cfg.get("mobilenet", {}).get("val_accuracy", 0.5)
+        if mobilenet_prob is not None and sklearn_prob is not None:
+            total = w_sk + w_mn
+            ml_score = (w_sk * sklearn_prob + w_mn * mobilenet_prob) / total
+        else:
+            ml_score = sum(ml_probs) / len(ml_probs)
         # Heuristics only boost when ML is already somewhat suspicious
         if heuristic_prob >= 0.6 and ml_score >= 0.25:
             prob = max(ml_score, 0.6 * ml_score + 0.4 * heuristic_prob)
@@ -167,8 +181,8 @@ def predict_from_bgr(img_bgr):
 
 
 def predict_from_path(image_path):
-    import cv2
-    img_bgr = cv2.imread(image_path)
+    from preprocess import load_image_bgr
+    img_bgr = load_image_bgr(image_path)
     if img_bgr is None:
         raise ValueError(f"Could not read image: {image_path}")
     prob, _ = predict_from_bgr(img_bgr)

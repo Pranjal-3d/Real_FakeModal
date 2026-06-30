@@ -15,10 +15,11 @@ import torch
 import torch.nn as nn
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.model_selection import train_test_split
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from torchvision import models, transforms
 
 from model_registry import update_model_entry
+from preprocess import collect_image_paths, load_image_bgr, prepare_image
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 REAL_DIR = os.path.join(BASE_DIR, "real")
@@ -26,25 +27,28 @@ SCREEN_DIR = os.path.join(BASE_DIR, "screen")
 MODEL_PATH = os.path.join(BASE_DIR, "mobilenet_liveness.pt")
 
 IMG_SIZE = 224
-BATCH_SIZE = 16
-EPOCHS = 40
-PATIENCE = 8
-LR = 3e-4
+BATCH_SIZE = 8
+EPOCHS = 50
+PATIENCE = 10
+LR = 2e-4
 
 
 class LivenessDataset(Dataset):
-    def __init__(self, paths, labels, transform):
+    def __init__(self, paths, labels, transform, train=False):
         self.paths = paths
         self.labels = labels
         self.transform = transform
+        self.train = train
 
     def __len__(self):
         return len(self.paths)
 
     def __getitem__(self, idx):
-        img = cv2.imread(self.paths[idx])
+        img = load_image_bgr(self.paths[idx])
         if img is None:
             img = np.zeros((IMG_SIZE, IMG_SIZE, 3), dtype=np.uint8)
+        else:
+            img = prepare_image(img, use_face_crop=True, output_size=IMG_SIZE)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         tensor = self.transform(img)
         label = torch.tensor(self.labels[idx], dtype=torch.float32)
@@ -52,13 +56,8 @@ class LivenessDataset(Dataset):
 
 
 def collect_paths():
-    exts = ("*.jpg", "*.jpeg", "*.png")
-    real_paths, screen_paths = [], []
-    for ext in exts:
-        real_paths.extend(glob.glob(os.path.join(REAL_DIR, ext)))
-        screen_paths.extend(glob.glob(os.path.join(SCREEN_DIR, ext)))
-    real_paths = sorted(real_paths)
-    screen_paths = sorted(screen_paths)
+    real_paths = collect_image_paths(REAL_DIR)
+    screen_paths = collect_image_paths(SCREEN_DIR)
     paths = real_paths + screen_paths
     labels = [0] * len(real_paths) + [1] * len(screen_paths)
     return paths, labels
@@ -102,6 +101,12 @@ def evaluate(model, loader, device):
     return acc, preds, labels_all, probs
 
 
+def make_sampler(labels):
+    counts = np.bincount(np.array(labels))
+    weights = 1.0 / counts[np.array(labels)]
+    return WeightedRandomSampler(weights, num_samples=len(labels), replacement=True)
+
+
 def main():
     paths, labels = collect_paths()
     print(f"Found {labels.count(0)} real and {labels.count(1)} screen images.")
@@ -115,10 +120,11 @@ def main():
 
     train_transform = transforms.Compose([
         transforms.ToPILImage(),
-        transforms.Resize((IMG_SIZE + 32, IMG_SIZE + 32)),
-        transforms.RandomResizedCrop(IMG_SIZE, scale=(0.75, 1.0)),
+        transforms.RandomResizedCrop(IMG_SIZE, scale=(0.8, 1.0)),
         transforms.RandomHorizontalFlip(),
-        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.15, hue=0.03),
+        transforms.RandomRotation(10),
+        transforms.ColorJitter(brightness=0.25, contrast=0.25, saturation=0.2, hue=0.04),
+        transforms.RandomGrayscale(p=0.05),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
@@ -130,8 +136,10 @@ def main():
     ])
 
     train_loader = DataLoader(
-        LivenessDataset(train_paths, y_train, train_transform),
-        batch_size=BATCH_SIZE, shuffle=True, num_workers=0,
+        LivenessDataset(train_paths, y_train, train_transform, train=True),
+        batch_size=BATCH_SIZE,
+        sampler=make_sampler(y_train),
+        num_workers=0,
     )
     val_loader = DataLoader(
         LivenessDataset(val_paths, y_val, val_transform),
@@ -139,12 +147,13 @@ def main():
     )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Training on {device}...")
+    print(f"Training on {device} (MediaPipe face crop + augmentation)...")
 
     model = build_model(device)
-    criterion = nn.BCEWithLogitsLoss()
+    pos_weight = torch.tensor([labels.count(0) / max(labels.count(1), 1)], device=device)
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     optimizer = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.5, patience=3)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.5, patience=4)
 
     best_acc = 0.0
     best_state = None
@@ -182,6 +191,7 @@ def main():
         "mean": [0.485, 0.456, 0.406],
         "std": [0.229, 0.224, 0.225],
         "val_accuracy": best_acc,
+        "use_face_crop": True,
     }, MODEL_PATH)
     update_model_entry("mobilenet", best_acc)
 
